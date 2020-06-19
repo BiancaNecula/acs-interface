@@ -5,9 +5,8 @@ from threading import Semaphore, Thread
 
 from django.conf import settings
 
-from interface import vmck
 from interface import models
-
+from interface.backend.submission.evaluator.vmck import VMCK
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class SubQueue(object):
         self.max_machines = free_machines
         self.sem = Semaphore(free_machines)
         self.consumer = Thread(target=self._run_submission)
-        self.sync = Thread(target=self._sync_vmck)
+        self.sync = Thread(target=self._sync_evaluator)
 
         self.consumer.daemon = True
         self.sync.daemon = True
@@ -30,7 +29,7 @@ class SubQueue(object):
             self.sem.acquire()
             self._evaluate_submission(sub)
 
-    def _sync_vmck(self):
+    def _sync_evaluator(self):
         while True:
             submissions = (
                 models.Submission.objects
@@ -62,9 +61,9 @@ class SubQueue(object):
 
     def _evaluate_submission(self, sub):
         log.info(f"Evaluate submission #{sub.id}")
-        sub.vmck_job_id = vmck.evaluate(sub)
+        sub.evaluator_job_id = SubmissionScheduler.evaluator.evaluate(sub)
         sub.state = sub.STATE_NEW
-        sub.changeReason = "VMCK id"
+        sub.changeReason = "Evaluator id"
         sub.save()
 
     def __str__(self):
@@ -72,6 +71,7 @@ class SubQueue(object):
 
 
 class SubmissionScheduler(object):
+    evaluator = VMCK
     # Queue for all the assignments that are not prioritiezed
     general_queue = SubQueue(settings.TOTAL_MACHINES)
 
